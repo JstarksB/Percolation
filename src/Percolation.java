@@ -1,21 +1,26 @@
 /**
  *  Here we define the Percolation class, which models a percolation system using the UnionFind algorithms
  * @author Jordan Starks-Browning
- * @version 2019-12-3
+ * @version 2019-12-6
  */
-
 import edu.princeton.cs.algs4.WeightedQuickUnionUF;
 
 public class Percolation {
 	
-	
+	private static final int opn = 1;
+	private static final int contop = 2;
+	private static final int conbot = 4;
+    
 	private final int size; // the length of each dimension of the board
-	private WeightedQuickUnionUF id; // array of weighted tree, id[j] is the next node further up the tree at j
+	private final WeightedQuickUnionUF id; // array of weighted tree, id[j] is the next node further up the tree at j
 	private int numberofopen; // number of open sites
 	private int[] squareprops; // bitwise information on square in grid: 4 = connected to bottom; 2 = connected to top, 1 = open, 0 = closed. 
 	private boolean percs; // boolean which is flipped when a square is opened that causes the system to percolate
 
-
+	/**
+	 * Constructor for the percolation grid, initialises a (n x n) grid with all blocked sites
+	 * @param n - size of grid
+	 */
 	public Percolation(int n) {
 		if (n < 1) { // n must be non-negative
 			throw new IllegalArgumentException("Error: size of percolation table must be non-negative");
@@ -24,14 +29,14 @@ public class Percolation {
 		numberofopen = 0; // starts with no open squares
 		percs = false; // system does not percolate at start
 		squareprops = new int[(n*n)]; // create array of length n*n, showing properties of the square
+		for (int i = 0; i < n*n; i++) {
+		    squareprops[i] = 0; // initialise all squares as closed and not connected to top or bottom
+		}
 		for (int i = 0; i < n; i++) {
-		    squareprops[i] = 2; // squares in top row connected to top, not bottom, and closed
-		}
-		for (int i = n; i < (n-1)*n ; i++) {
-		    squareprops[i] = 0; // squares in middle of grid are not connected to bottom or top, and are closed
-		}
-		for (int i = (n-1)*n; i < (n*n) ; i++) {
-		    squareprops[i] = 4; //squares in bottom row connected to bottom, not top, and closed
+            squareprops[i] = (squareprops[i] | contop); // add property "connected to top" to top row squares
+        }
+		for (int i = (n-1)*n; i < (n*n); i++) {
+		    squareprops[i] = (squareprops[i] | conbot); // add property "connected to bottom" to bottom row squares
 		}
 		id = new WeightedQuickUnionUF((n*n)); // create weighted UF tree
 	}
@@ -47,8 +52,8 @@ public class Percolation {
 			throw new IllegalArgumentException("Error: row and column must be in range of table (between 1 and " + size);
 		}
 		int flatcoord = twoToOneDim(row, col); // convert the row/column coordinates into a "flat coordinate" to use in the 1D array
-		if ((squareprops[flatcoord] & 1) == 0) {   //if 'open' bit is flipped, do nothing, otherwise continue 
-		    squareprops[flatcoord] = (squareprops[flatcoord] | 1); // set square to be open
+		if ((squareprops[flatcoord] & opn) == 0) {   // if 'open' bit is flipped, do nothing, otherwise continue 
+		    squareprops[flatcoord] = (squareprops[flatcoord] | opn); // set square to be open
 		    numberofopen++; // increase number of open sites
 		    if (size != 1) { // if size == 1 then we are done
 		        if (row == 1) { // for a square in the top row
@@ -61,12 +66,14 @@ public class Percolation {
 	            }
 	            if (col == 1) { // for a square in the left edge
 	                validConnection(flatcoord, flatcoord+1); // connect to square on right
-	            } else if (row == size) { // for a square in the right edge
+	            } else if (col == size) { // for a square in the right edge
 	                validConnection(flatcoord, flatcoord-1); // connect to square on left
 	            } else { // for a square in the middle, connect to both sides
 	                validConnection(flatcoord, flatcoord+1);
 	                validConnection(flatcoord, flatcoord-1);
 	            }
+		    } else {
+		        percs = true;
 		    }
 		}
 	}
@@ -83,11 +90,11 @@ public class Percolation {
 			throw new IllegalArgumentException("Error: row and column must be in range of table (between 1 and " + size);
 		}
 		int flatcoord = twoToOneDim(row, col);		
-		return (squareprops[flatcoord] & 1) == 1;
+		return (squareprops[flatcoord] & opn) == opn;
 	}
 	
 	/**
-	 * isFull - Determines whether a particular square in the grid is full (connected to the top of the grid)
+	 * isFull - Determines whether a particular square in the grid is full (connected to the top of the grid and open)
 	 * @param row
 	 * @param col
 	 * @return a boolean - whether or not the square is full
@@ -98,7 +105,7 @@ public class Percolation {
 			throw new IllegalArgumentException("Error: row and column must be in range of table (between 1 and " + size);
 		}
 		int flatcoord = twoToOneDim(row, col);
-		return (squareprops[id.find(flatcoord)] & 3) == 3;
+		return (squareprops[id.find(flatcoord)] & (opn + contop)) == (opn + contop);
 	}
 	
 	/**
@@ -134,31 +141,17 @@ public class Percolation {
 	 * @param point2 (point to check, may not be open)
 	 */
 	private void validConnection(int point1, int point2) {
-	    if ((squareprops[point2] & 1) == 1) { // if point2 is open (point1 must be checked as open before using fn)
-	        int mask = (squareprops[id.find(point1)]|squareprops[id.find(point2)]); // collect the status of the root of each point's tree
+	    if ((squareprops[point2] & opn) == opn) { // if point2 is open (point1 must be checked as open before using fn)
+	        int mask = (squareprops[id.find(point1)] | squareprops[id.find(point2)]); // collect the status of the root of each point's tree
 	        id.union(point1, point2); // connect the two points into a single tree
 	        squareprops[id.find(point1)] = mask; // update the status of this single tree
-	        if (mask == 7) {
+	        if (mask == (opn + contop + conbot) && !percs) {
 	            percs = true;
 	        }
 	    }
 	}
 	
 	public static void main(String[] args) {
-		Percolation testperc = new Percolation(5);
-		System.out.println(String.valueOf(testperc.isFull(1, 1)));
-		testperc.open(1, 1);
-		System.out.println("(1,1) opened");
-		System.out.println(String.valueOf(testperc.isFull(1, 1)));
-		System.out.println(String.valueOf(testperc.isOpen(1, 1)));
-		System.out.println(String.valueOf(testperc.isOpen(2, 1)));
-		System.out.println(String.valueOf(testperc.isFull(2, 1)));
-		testperc.open(1, 2);
-        System.out.println("(1,2) opened");
-        System.out.println(String.valueOf(testperc.isFull(1, 1)));
-        System.out.println(String.valueOf(testperc.isOpen(1, 1)));
-        System.out.println(String.valueOf(testperc.isOpen(2, 1)));
-        System.out.println(String.valueOf(testperc.isFull(2, 1)));
+		// test space
 	}
-
 }
